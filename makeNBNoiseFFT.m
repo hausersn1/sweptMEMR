@@ -36,7 +36,7 @@ if(~exist('playplot','var'))
 end
 
 %-----------------------------------------------------
-t = 0:(1/fs):(tmax - 1/fs);
+t = 0:(1/fs):(tmax);
 
 
 %% Making Noise

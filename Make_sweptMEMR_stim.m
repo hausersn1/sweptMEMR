@@ -1,4 +1,5 @@
 %% Create Stimuli 
+function stim = Make_sweptMEMR_stim()
 
 fs = 48828.125; % samples/sec
 
@@ -26,7 +27,7 @@ startSample = floor(nSamples/3); % silence before the click onset (samps)
 click(startSample:startSample + (clickN-1)) = 0.95;
 
 %% Generate noise shape
-noiseSamples = round(totalDur * fs); % total 
+noiseSamples = ceil(totalDur * fs); % total 
 total_nSamples = nSamples + ceil(noiseburstdur .* fs .* 1e-3) + 256; 
 
 h = linspace(0,54,noiseSamples)';
@@ -49,12 +50,14 @@ rows = size(h,1); % length of noise in samples
 cols = numOfTrials + ThrowAway;
 
 for m = 1:cols
-    noise(:, m) = randn(rows,1); % makeNBNoiseFFT(bandwidth, fc, totalDur.*2, fs, 0);
+    noise(:, m) = makeNBNoiseFFT(bandwidth, fc, totalDur.*2, fs, 0);
 end
 
 Noise = noise .* h; % multiply your noise vector by the shaping
 
-C = clickTrain; 
+ 
+C = zeros(rows, 1); 
+C(1:numel(clickTrain), 1) = clickTrain; 
 
 %% Take out chunks for the click
 
@@ -71,4 +74,26 @@ end
 N = Noise .* Mask;
 
 % Plot stimulus so far
-figure; plot(N); hold on; plot( C)
+t = 0:(1/fs):(rows-1)/fs; 
+figure; plot(t, N); hold on; plot(t, C)
+
+
+% Values to save as stim
+stim.N = N; 
+stim.C = C; 
+
+stim.fs = fs; 
+
+stim.clickatt = clickatt;
+stim.noiseatt = 18; 
+stim.ThrowAway = ThrowAway; 
+stim.numOfTrials = numOfTrials; 
+
+stim.totalDur = totalDur; 
+stim.bandwidth = bandwidth; 
+stim.fc = fc; 
+
+stim.noiseburstdur = noiseburstdur; 
+
+
+end
