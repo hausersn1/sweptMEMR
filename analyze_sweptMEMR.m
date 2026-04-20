@@ -1,24 +1,35 @@
 %% Analysis // Adapted from S. Goodman
 clear all
-load('C:\Users\ARDC User\Desktop\DATA\aj_11172025_MEMR_R.mat')
+
+[FileName,PathName,FilterIndex] = uigetfile(strcat('./Results/sweptMEMR_*.mat'),...
+    'Please pick MEM data file to analyze');
+MEMfile = fullfile(PathName, FileName);
+load(MEMfile);
+
 %%
+stim = data.stim;
+
 fs = stim.fs;
-time = (0:1:size(stim.clickStimulus,1)-1)'/fs;
-indx = stim.clickIndex;
-nClicks = length(indx);
-elicitor = stim.NoiseStimulus(:,1);
+time = stim.t;
+
+elicitor = stim.N(:,1);
 noiseLvl = 20*log10(stim.h/.00002);
-Clicks = stim.clickStimulus(:,1);
+Clicks = stim.C(:,1);
+
 
 % get the stimulus levels ---------------------------------------------
-t = (0:1:length(elicitor)-1)'/fs ;
 [rows,~] = size(elicitor);
-chunkSize = stim.clickN;
-E = reshape(elicitor,chunkSize,rows/chunkSize); % elicitor in matrix
-C = reshape(Clicks(:,1),chunkSize,rows/chunkSize); % clicks in matrix
-T = reshape(t,chunkSize,rows/chunkSize); % time in matrix
+chunkSize = numel(stim.singleClick);
 
-for ii=1:numel(indx) % loop over 160 colums (clicks in the sweep)
+elicitor = elicitor(1:chunkSize*stim.clicksPerTrain);
+Clicks = Clicks(1:chunkSize*stim.clicksPerTrain);
+time = time(1:chunkSize*stim.clicksPerTrain);
+
+E = reshape(elicitor,chunkSize,stim.clicksPerTrain); % elicitor in matrix
+C = reshape(Clicks(:,1),chunkSize,stim.clicksPerTrain); % clicks in matrix
+T = reshape(time,chunkSize,stim.clicksPerTrain); % time in matrix
+
+for ii=1:stim.clicksPerTrain % loop over 160 colums (clicks in the sweep)
     RMS(ii,1) = sqrt(mean(E(:,ii).^2)); % elicitor RMS
     RMSC(ii,1) = sqrt(mean(C(:,ii).^2)); % rms of the click
     RMST(ii,1) = mean(T(:,ii)); % mean time of each 50 ms chunk
@@ -27,72 +38,72 @@ end
 pSPL = 20*log10(max(C(:,ii)/.00002));
 rmsSPL = 20*log10(RMSC/.00002);
 
-timeChunk = zeros(1,nClicks);
-for jj=1:nClicks % loop across each click position in the sweep
-    timeChunk(1,jj) = time(indx(jj)); % the temporal postion of each click position
-end
 
 %% Trying SH's simple way
 % Average all responses
-delay = 128; 
+delay = 97;
 freq = linspace(200, 8000, 1024);
 MEMband = [500, 2000];
 ind = (freq >= MEMband(1)) & (freq <= MEMband(2));
-holeDurN = round(stim.clickHoleDuration*stim.fs);
-resp_avg = mean(resp(:,2:end),2);
-R = reshape(resp_avg, chunkSize, rows/chunkSize);
-temp_baseline = squeeze(R(1+delay:holeDurN+delay, 1, :));
+
+% Chunk the response into windows of each click
+resp = data.resp.AllBuffs(:,1:chunkSize*stim.clicksPerTrain);
+
+R = zeros(stim.Averages, stim.clicksPerTrain, chunkSize); % create a 3-D vector with trials x chunk x time
+for jj = 1:stim.Averages
+    trial_resp = resp(jj,:);
+    R(jj, :,:) = reshape(trial_resp, chunkSize,stim.clicksPerTrain)'; % elicitor in matrix
+end
+
+nSamples = ceil(stim.clickWin * 1e-3  * fs) +1; % total number of samples in just the click that we want to look at 
+R = R(:,:,pad+(1:nSamples)); % Get rid of the noise part, just have click; 
+
+sampsToAnalyze = 1001:2025; 
+
+% Get baseline response from first and last 3 clicks
+temp_baseline = trimmean(R(:, 1:stim.n_baseline_clicks+1, sampsToAnalyze),20, 'floor', 1);
+temp_baseline = mean(squeeze(temp_baseline), 1); 
+temp_baseline = detrend(temp_baseline); 
 tempf_baseline = pmtm(temp_baseline, 4, freq, fs);
 baseline_freq = tempf_baseline'; %median(tempf_baseline, 2);
 
-for i = 2:size(R, 2) % loop through each level
-    temp = squeeze(R(1+delay:holeDurN+delay, i, :));
-    tempf = pmtm(temp, 4, freq, fs);
-    temp_freq(:,i-1) = tempf; %median(tempf,2);
+for i = stim.n_baseline_clicks+2:size(R, 2) % loop through each level skipping the first baseline clicks
+    temp = trimmean(R(:,i, sampsToAnalyze), 20, 'floor', 1);
+    temp = squeeze(temp);
+    temp = detrend(temp);
+
+    tempf = pmtm(temp', 4, freq, fs);
+    temp_freq(:,i-(stim.n_baseline_clicks+1) = tempf; %median(tempf,2);
 end
 
 MEM = pow2db(temp_freq ./ baseline_freq);
- avgpts = 11;
-% for j = 1:avgpts
-%     levelsToAvg = floor((size(MEM, 2)/avgpts));
-%     colsToAvg = MEM(:,(j-1)*levelsToAvg+1:j*levelsToAvg);
-%     avgMEM(:,j) = mean(colsToAvg,2);
-%     ErmsToAvg = RMS((j-1)*levelsToAvg+1:j*levelsToAvg);
-%     avgElic(1,j) = mean(ErmsToAvg);
-%     avgT(1,j) = T(1,(j-1)*levelsToAvg+1);
-% end
 
-steps = floor(linspace((2),(nClicks/2),avgpts)); 
-steps = [steps, 160-flip(steps(1:end-1))];
 nfilt = 65;
-for k = 1:length(steps)
-    MEMs(:,k) = sgolayfilt(MEM(:,steps(k)), 2, nfilt);
-    Elics(1,k) = RMS(steps(k)); 
-    Ts(1,k) = T(1,steps(k)); 
+for k = 1:stim.clicksPerTrain % now look at clicks other than baseline clicks
+    MEMs(:,k) = sgolayfilt(MEM(:,k), 2, nfilt);
+    Elics(1,k) = RMS(k+stim.n_baseline_clicks+2);
+    Ts(1,k) = T(1,k+stim.n_baseline_clicks+2);
 end
 
 power = mean(abs(MEMs(ind, :)), 1);
 deltapow = power; % - mean(power(1:2));
 
 % Plotting
-cols = getDivergentColors(avgpts);
+cols = getDivergentColors((size(MEMs,2)+1)/2);
 cols = [cols; flip(cols(1:end-1,:))];
 figure;
 semilogx(freq / 1e3,MEMs, 'linew', 2);
 xlim([0.2, 8]);
+ylim([-2, 2])
 xticks([0.25, 0.5, 1, 2, 4, 8])
 set(gca,'ColorOrder', cols)
 %set(gca, 'XTick', ticks, 'XTickLabel', num2str(ticks'), 'FontSize', 16);
 
 figure;
-plot(t, stim.NoiseStimulus/max(stim.NoiseStimulus)); 
-hold on; 
+plot(time, elicitor/max(elicitor), 'Color', 1-[.2, .2, .2]);
+hold on;
 plot(Ts, deltapow, 'ok-', 'linew', 2);
-hold on; 
-plot(T(1,1:159),mean(abs(MEM(ind, :)), 1)) 
 set(gca, 'FontSize', 14)
-
-
 
 
 % %% analyze MEMR --------------------------------------------------------
