@@ -73,7 +73,7 @@ for i = stim.n_baseline_clicks+2:size(R, 2) % loop through each level skipping t
     temp = detrend(temp);
 
     tempf = pmtm(temp', 4, freq, fs);
-    temp_freq(:,i-(stim.n_baseline_clicks+1) = tempf; %median(tempf,2);
+    temp_freq(:,i-(stim.n_baseline_clicks+1)) = tempf; %median(tempf,2);
 end
 
 MEM = pow2db(temp_freq ./ baseline_freq);
