@@ -6,6 +6,7 @@ fs = 48828.125; % samples/sec
 clickatt = 32 + 6; % +6 for HB7 with differential output
 ThrowAway = 1; 
 numOfTrials = 20; 
+stim.levelRange = 54; % dB to sweep across
 
 totalDur = 4; % approx duration in seconds (x2 for total stim duration, up and down)
 bandwidth = 8000; % Hz for noise frequency content
@@ -53,7 +54,7 @@ total_nSamples = pad + nSamples + ceil(noiseburstdur .* fs .* 1e-3) ; % samples 
 
 noiseSamples = round(noiseSamples/total_nSamples) .* total_nSamples; % make this a multiple of total samples
 
-h = linspace(0,54,noiseSamples)';
+h = linspace(0,stim.levelRange,noiseSamples)';
 h(1) = eps;
 h = [h;flipud(h)];
 h = 10.^(h/20); % noise amplitude in linear units
