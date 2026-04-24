@@ -1,11 +1,11 @@
 %% Create Stimuli for Swept MEMR
 function stim = Make_sweptMEMR_stim()
 
-% Parameters 
+% Parameters
 fs = 48828.125; % samples/sec
 clickatt = 32 + 6; % +6 for HB7 with differential output
-ThrowAway = 1; 
-numOfTrials = 20; 
+ThrowAway = 1;
+numOfTrials = 20;
 
 totalDur = 4; % approx duration in seconds (x2 for total stim duration, up and down)
 bandwidth = 8000; % Hz for noise frequency content
@@ -19,21 +19,23 @@ clickLen = 41.92; % ms; desired click window length in seconds
 
 n_baseline_clicks = 5; % number of extra clicks to append at beginning
 
-% Save some things to the stim file: 
-stim.fs = fs; 
+% Save some things to the stim file:
+stim.fs = fs;
 stim.clickatt = clickatt;
-stim.noiseatt = 4 + 6; 
-stim.ThrowAway = ThrowAway; 
-stim.Averages = numOfTrials; 
+stim.noiseatt = 4 + 6;
+stim.ThrowAway = ThrowAway;
+stim.Averages = numOfTrials;
 
-stim.totalDur = totalDur; 
-stim.clickWin = clickLen; 
-stim.bandwidth = bandwidth; 
-stim.fc = fc; 
+stim.totalDur = totalDur;
+stim.clickWin = clickLen;
+stim.bandwidth = bandwidth;
+stim.fc = fc;
 
-stim.noiseburstdur = noiseburstdur; 
-stim.pad = pad; 
-stim.n_baseline_clicks = n_baseline_clicks; 
+stim.noiseburstdur = noiseburstdur;
+stim.pad = pad;
+stim.n_baseline_clicks = n_baseline_clicks;
+
+stim.risetime = 5; % ms for the ramping around the nosieburst
 
 %% Generate a single click
 nSamples = ceil(clickLen * 1e-3  * fs); % total number of samples in a click window
@@ -48,7 +50,7 @@ startSample = floor(nSamples/3); % silence before the click onset (samps)
 click(startSample:startSample + (clickN-1)) = 0.95;
 
 %% Generate noise shape
-noiseSamples = ceil(totalDur * fs); % total 
+noiseSamples = ceil(totalDur * fs); % total
 total_nSamples = pad + nSamples + ceil(noiseburstdur .* fs .* 1e-3) ; % samples per one burst (pad + click + noiseburst )
 
 noiseSamples = round(noiseSamples/total_nSamples) .* total_nSamples; % make this a multiple of total samples
@@ -59,23 +61,23 @@ h = [h;flipud(h)];
 h = 10.^(h/20); % noise amplitude in linear units
 h = h / max(abs(h)) * 0.95; % rescale to unit amplitude
 
-stim.h = h; 
+stim.h = h;
 %% Make the click train
 longclick = zeros(total_nSamples, 1); % give extra space for the noise burst and pad
-longclick(pad+(1:numel(click)), 1) = click; 
+longclick(pad+(1:numel(click)), 1) = click;
 
 clicksPerTrain = (noiseSamples*2) / total_nSamples; % figure out the number of clicks needed total
 clickTrain = repmat(longclick,1,clicksPerTrain); % concatenate all of them together with correct spacing
 clickTrain = clickTrain(:); % make it a row vector
 
-stim.singleClick = longclick; 
-stim.clicksPerTrain = clicksPerTrain; 
+stim.singleClick = longclick;
+stim.clicksPerTrain = clicksPerTrain;
 
 %% Generate noise
 rows = size(h,1); % length of noise in samples
 cols = numOfTrials + ThrowAway; % total number of trials
 
-noise = zeros(rows,cols); 
+noise = zeros(rows,cols);
 for m = 1:cols
     noise_temp = makeNBNoiseFFT(bandwidth, fc, rows/fs, fs, 0);
     noise(:, m) = noise_temp(1:rows,1); % just make sure it's the same length because makeNBN takes a time input in seconds so could be rounding issues
@@ -87,30 +89,45 @@ Noise = noise .* h; % multiply your noise vector by the shaping
 clickIndex = pad+(1:numel(longclick):rows); % find location of click windows
 stim.clickIndex = clickIndex; % save where the click windows start
 
-Mask = ones(size(Noise));
+% Make a ramp
+Nramp = ceil(fs*stim.risetime*1e-3*2)+1;
+w = dpss(Nramp,1,1);
+
+w = w - w(1); % start at zero
+w = w/max(w); % normalize to one as the max.
+half = ceil(Nramp/2);
+w_on = w(1:half);
+w_off = w((end-half+1):end);
+
+% Initialize the mask
+Mask = ones(size(Noise,1),1);
 
 for ii= clickIndex
     Mask(ii-pad:ii+numel(click),:) = 0;
+    if ii - pad - half > 0 && ii + numel(click) + half < numel(Mask)
+        Mask(ii-pad-(half:-1:1),:) = w_off;
+        Mask(ii+numel(click)+(1:half),:) = w_on;
+    end
 end
 
 Noise_masked = Noise .* Mask;
 
-baseline_clicktrain = repmat(longclick, n_baseline_clicks,1); % Add a bunch of baseline clicks at the beginning of the stimulus 
+baseline_clicktrain = repmat(longclick, n_baseline_clicks,1); % Add a bunch of baseline clicks at the beginning of the stimulus
 
 %% Get the final versions of the stimuli with baseline added.
 C = [baseline_clicktrain; clickTrain];
 
-N = zeros(numel(C), cols); 
-N(numel(baseline_clicktrain)+(1:rows), :) = Noise_masked; 
+N = zeros(numel(C), cols);
+N(numel(baseline_clicktrain)+(1:rows), :) = Noise_masked;
 
 % Save final forms of noise and click stimuli
-stim.C = C; 
-stim.N = N; 
+stim.C = C;
+stim.N = N;
 
 %%
-% Plot stimulus 
-t = 0:(1/fs):(rows+numel(baseline_clicktrain)-1)/fs; 
-stim.t = t; 
+% Plot stimulus
+t = 0:(1/fs):(rows+numel(baseline_clicktrain)-1)/fs;
+stim.t = t;
 
 figure; plot(t, N); hold on; plot(t, C)
 xlabel("Time (s)")
