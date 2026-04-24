@@ -32,6 +32,7 @@ stim.bandwidth = bandwidth;
 stim.fc = fc; 
 
 stim.noiseburstdur = noiseburstdur; 
+stim.pad = pad; 
 stim.n_baseline_clicks = n_baseline_clicks; 
 
 %% Generate a single click
